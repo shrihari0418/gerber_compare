@@ -243,6 +243,44 @@ def safe_symmetric_difference(original, working, *, warnings: list[str] | None =
             warnings.append("XOR required 0.000001 mm precision normalization after a GEOS topology exception.")
         return result
 
+
+def safe_difference(original, working, *, label: str = "Difference geometry", warnings: list[str] | None = None):
+    """Calculate ``original - working`` with the same bounded GEOS recovery as XOR."""
+    original = normalize_geometry(original, label="Original geometry", warnings=warnings)
+    working = normalize_geometry(working, label="Working geometry", warnings=warnings)
+    try:
+        return normalize_geometry(
+            original.difference(working), label=label, warnings=warnings
+        )
+    except Exception:
+        # Repeat normalization before precision reduction: valid inputs can
+        # still trigger an overlay failure at nearly coincident boundaries.
+        original = normalize_geometry(original, label="Original geometry", warnings=warnings)
+        working = normalize_geometry(working, label="Working geometry", warnings=warnings)
+        try:
+            return normalize_geometry(
+                original.difference(working), label=label, warnings=warnings
+            )
+        except Exception:
+            pass
+        precision_original = _precision_normalize(original, label="Original geometry")
+        precision_working = _precision_normalize(working, label="Working geometry")
+        try:
+            result = normalize_geometry(
+                precision_original.difference(precision_working),
+                label=label,
+                warnings=warnings,
+            )
+        except Exception as exc:
+            raise GeometryError(
+                f"{label} failed after repair and controlled precision normalization."
+            ) from exc
+        if warnings is not None:
+            warnings.append(
+                f"{label} required 0.000001 mm precision normalization after a GEOS topology exception."
+            )
+        return result
+
 def aperture_shape(aperture: Aperture):
     LineString, Point, Polygon, _ = _shapely()
     if aperture.geometry_type == "circle": return Point(0, 0).buffer(aperture.parameters[0] / 2)

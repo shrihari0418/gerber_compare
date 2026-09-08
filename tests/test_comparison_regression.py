@@ -21,7 +21,8 @@ def test_small_change_is_ignored_and_large_change_is_flagged():
     ignored = compare(gerber(), gerber("R,2.02X2"))
     flagged = compare(gerber(), gerber("R,2.2X2"))
     assert {region.classification for region in ignored.regions} == {"IGNORE"}
-    assert {region.classification for region in flagged.regions} == {"FLAG"}
+    assert {region.classification for region in flagged.regions} == {"ADDED_IN_WORKING"}
+    assert flagged.overall_result == "FAIL"
 
 def test_component_count_topology_change_is_flagged():
     result = compare(gerber(), gerber(flashes=((1, 1), (5, 1))))

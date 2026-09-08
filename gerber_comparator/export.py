@@ -52,9 +52,16 @@ def _snapshots(result, directory: Path):
         import matplotlib.pyplot as plt
     except ImportError: return {}
     snapshots = {}
-    for n, region in enumerate((r for r in result.regions if r.classification == "FLAG"), 1):
+    for n, region in enumerate((r for r in result.regions if r.classification not in {"IGNORE", "UNRESOLVED"}), 1):
         fig, ax = plt.subplots(figsize=(7, 7), dpi=result.config.snapshot_dpi)
-        for geom, color, label in ((result.original_geometry, "#167ac6", "Original"), (result.working_geometry, "#d06c18", "Working"), (region.geometry, "#d7191c", "Difference")):
+        directional = (
+            (region.geometry, "#d7191c", "Missing from Working")
+            if region.classification == "MISSING_FROM_WORKING" else
+            (region.geometry, "#1b9e77", "Added in Working")
+            if region.classification == "ADDED_IN_WORKING" else
+            (region.geometry, "#d7191c", "Difference")
+        )
+        for geom, color, label in ((result.original_geometry, "#167ac6", "Original"), (result.working_geometry, "#d06c18", "Working"), directional):
             for polygon in ([geom] if geom.geom_type == "Polygon" else geom.geoms):
                 if polygon.is_empty: continue
                 x,y = polygon.exterior.xy; ax.fill(x,y, color=color, alpha=.25, label=label)
@@ -64,4 +71,4 @@ def _snapshots(result, directory: Path):
 
 def _html(result, path: Path):
     rows = "".join(f"<tr><td>{r.region_id}</td><td>{r.classification}</td><td>{r.classification_reason}</td><td>{r.area_mm2:.3f}</td><td>{r.geometric_deviation_mm:.3f}</td><td>{r.translation_mm:.3f}</td><td>{'yes' if r.topology_changed else 'no'}</td><td>{f'<a href=\"{r.snapshot}\">snapshot</a>' if r.snapshot else ''}</td></tr>" for r in result.regions)
-    stats = result.statistics(); path.write_text(f"""<!doctype html><html><head><meta charset='utf-8'><title>Gerber Comparison Report</title><style>body{{font-family:Arial;margin:2rem}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #777;padding:.45rem}}th{{background:#eee}}.FAIL{{color:#b00}}</style></head><body><h1>Universal Gerber Comparator</h1><h2 class='{result.overall_result}'>{result.overall_result}</h2><p>Original: {result.original.filename}<br>Working: {result.working.filename}</p><p>Geometry tolerance: {result.config.geometric_tolerance_mm:.3f} mm; Translation tolerance: {result.config.translation_tolerance_mm:.3f} mm.</p><p>Flagged: {stats['flagged_regions']} / Total regions: {stats['total_difference_regions']}; Raw XOR area: {stats['total_xor_area_mm2']:.3f} mm².</p><table><tr><th>Region</th><th>Class</th><th>Reason</th><th>Area mm²</th><th>Deviation mm</th><th>Translation mm</th><th>Topology</th><th>Snapshot</th></tr>{rows}</table></body></html>""", encoding="utf-8")
+    stats = result.statistics(); path.write_text(f"""<!doctype html><html><head><meta charset='utf-8'><title>Gerber Comparison Report</title><style>body{{font-family:Arial;margin:2rem}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #777;padding:.45rem}}th{{background:#eee}}.FAIL{{color:#b00}}</style></head><body><h1>Universal Gerber Comparator</h1><h2 class='{result.overall_result}'>{result.overall_result}</h2><p>Original: {result.original.filename}<br>Working: {result.working.filename}</p><p>Geometry tolerance: {result.config.geometric_tolerance_mm:.3f} mm; Translation tolerance: {result.config.translation_tolerance_mm:.3f} mm.</p><p>Flagged: {stats['flagged_regions']} / Total regions: {stats['total_difference_regions']}; Missing from Working: {stats['missing_from_working']}; Added in Working: {stats['added_in_working']}; Raw XOR area: {stats['total_xor_area_mm2']:.3f} mm².</p><table><tr><th>Region</th><th>Class</th><th>Reason</th><th>Area mm²</th><th>Deviation mm</th><th>Translation mm</th><th>Topology</th><th>Snapshot</th></tr>{rows}</table></body></html>""", encoding="utf-8")
