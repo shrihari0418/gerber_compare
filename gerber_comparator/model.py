@@ -42,7 +42,15 @@ class ComparisonConfig:
     maximum_tile_size: float = 10.0
     tile_margin_factor: float = 2.0
     minimum_difference_area: float = 0.0
+    enable_spatial_index: bool = True
+    enable_coarse_screening: bool = True
+    enable_displacement_pairing: bool = True
+    enable_hausdorff_verification: bool = True
+    enable_local_topology: bool = True
+    translation_area_similarity: float = 0.80
     max_candidate_regions: int = 10000
+    max_verification_regions: int = 5000
+    reference_mode: bool = False
 
 @dataclass
 class DifferenceRegion:

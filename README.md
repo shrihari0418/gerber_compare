@@ -13,6 +13,8 @@ python -m gerber_comparator original.gtl working.gtl --auto-align --output-dir G
 
 The package writes an offline report, JSON/CSV diagnostics, raw and flagged XOR Gerbers, snapshots when Matplotlib is available, and a ZIP archive.
 
+Large layers use the default tiled comparison engine: it indexes normalized vector components with STRtree, screens lazy tolerance-aware tiles, and verifies only merged local candidates. `ComparisonConfig` exposes tile and candidate-limit settings; a limit produces an explicit incomplete result rather than a partial pass.
+
 ## Safety and feature boundaries
 
 The parser supports standard and semantic named apertures (`C`, `R`, `O`, `P`, `CIRCLE`, `RECTANGLE`, `OBLONG`, `POLYGON`), flashes, strokes, and simple regions. Every aperture retains its raw definition. Unknown/vendor apertures are parsed but **explicitly unresolved**; the engine never guesses their geometry. Aperture macro definitions are preserved for diagnostics but macro primitive execution, clear polarity, arcs, transforms, and negative-image semantics require further implementation before use on production data containing them.

@@ -1,6 +1,7 @@
 """Comparison orchestration: parse -> normalized vectors -> XOR -> classification."""
 from __future__ import annotations
 from dataclasses import asdict, dataclass, field
+from math import hypot
 from pathlib import Path
 import time
 from .geometry import normalize_geometry, resolve_geometry, safe_union
@@ -74,15 +75,14 @@ def compare_gerbers(original: str | Path, working: str | Path, config: Compariso
     from .performance.tiled_compare import compare_tiled
     candidates, raw_xor, missing_geometry, added_geometry, performance = compare_tiled(original_geometry, aligned_working, config, repair_warnings, progress=progress_callback)
     regions = []
-    topology_changed = config.topology_check and len(_parts(original_geometry)) != len(_parts(aligned_working))
     for index, candidate in enumerate(candidates, 1):
         centroid = candidate.geometry.centroid
         min_x, min_y, max_x, max_y = candidate.bounds
         thin_residual = min(max_x - min_x, max_y - min_y) <= config.geometric_tolerance_mm
         classification = "IGNORE" if thin_residual else candidate.classification
-        reason = "BELOW_TOLERANCE" if thin_residual else ("TOPOLOGY_CHANGE" if topology_changed else candidate.classification)
-        regions.append(DifferenceRegion(f"F-{index:03d}", candidate.geometry, candidate.geometry.area, candidate.geometry.length, candidate.bounds, (centroid.x, centroid.y), float("inf"), 0.0, topology_changed, classification, reason))
+        reason = "BELOW_TOLERANCE" if thin_residual else candidate.reason
+        regions.append(DifferenceRegion(f"F-{index:03d}", candidate.geometry, candidate.geometry.area, candidate.geometry.length, candidate.bounds, (centroid.x, centroid.y), float("inf"), hypot(candidate.dx, candidate.dy), candidate.topology_changed, classification, reason, direction=candidate.direction, dx_mm=candidate.dx, dy_mm=candidate.dy, displacement_mm=hypot(candidate.dx, candidate.dy), confidence=candidate.confidence))
     flagged_xor = safe_union([region.geometry for region in regions], label="Flagged candidate geometry", warnings=repair_warnings)
     diagnostics = {"original_geometry_valid_before": getattr(original_layer, "geometry_valid_before", True), "original_geometry_valid_after": original_geometry.is_valid, "working_geometry_valid_before": getattr(working_layer, "geometry_valid_before", True), "working_geometry_valid_after": aligned_working.is_valid, "geometry_repair_applied": any("repair" in warning.lower() for warning in repair_warnings), **performance}
-    result = ComparisonResult(original_layer, working_layer, config, original_geometry, aligned_working, raw_xor, flagged_xor, regions, {"translation_x_mm": dx, "translation_y_mm": dy, "rotation_deg": rotation, "method": "centroid" if config.auto_alignment else "manual"}, repair_warnings, {"parse_seconds": parsed-started, "geometry_seconds": geometry_time-parsed, **performance, "total_seconds": time.perf_counter()-started}, diagnostics, missing_geometry, added_geometry, performance["candidate_limit_exceeded"])
+    result = ComparisonResult(original_layer, working_layer, config, original_geometry, aligned_working, raw_xor, flagged_xor, regions, {"translation_x_mm": dx, "translation_y_mm": dy, "rotation_deg": rotation, "method": "centroid" if config.auto_alignment else "manual"}, repair_warnings, {"parse_seconds": parsed-started, "geometry_seconds": geometry_time-parsed, **performance, "total_seconds": time.perf_counter()-started}, diagnostics, missing_geometry, added_geometry, performance["candidate_limit_exceeded"] or performance["verification_limit_exceeded"])
     return result
