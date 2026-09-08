@@ -3,7 +3,7 @@ import pytest
 shapely = pytest.importorskip("shapely")
 from shapely.geometry import GeometryCollection, LineString, MultiLineString, Point, Polygon
 from gerber_comparator import geometry as geometry_module
-from gerber_comparator.geometry import normalize_geometry, safe_symmetric_difference, safe_union
+from gerber_comparator.geometry import normalize_geometry, safe_difference, safe_symmetric_difference, safe_union
 
 def test_invalid_polygon_is_repaired_to_valid_polygonal_geometry():
     bow_tie = Polygon([(0, 0), (2, 2), (0, 2), (2, 0), (0, 0)])
@@ -23,6 +23,22 @@ def test_invalid_geometries_produce_valid_vector_xor():
     xor = safe_symmetric_difference(original, working)
     assert xor.is_valid
     assert xor.area > 0
+
+
+def test_safe_difference_preserves_direction_and_empty_results():
+    square = Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])
+
+    assert safe_difference(square, square).is_empty
+    assert safe_difference(square, Polygon()).area == pytest.approx(square.area)
+    assert safe_difference(Polygon(), square).is_empty
+
+
+def test_safe_difference_recovers_invalid_inputs_to_valid_polygonal_geometry():
+    bow_tie = Polygon([(0, 0), (2, 2), (0, 2), (2, 0), (0, 0)])
+    result = safe_difference(bow_tie, Polygon())
+
+    assert result.is_valid
+    assert result.area > 0
 
 
 def test_polygonal_members_of_a_geometry_collection_are_retained():

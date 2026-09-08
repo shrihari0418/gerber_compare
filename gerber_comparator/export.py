@@ -28,7 +28,7 @@ def export_package(result: ComparisonResult, output_dir: str | Path) -> Path:
     for directory in (report / "flagged", gerber, data, diagnostics): directory.mkdir(parents=True, exist_ok=True)
     snapshots = _snapshots(result, report / "flagged") if result.config.snapshot_generation else {}
     for region in result.regions: region.snapshot = snapshots.get(region.region_id)
-    payload = {"metadata": {"tool_version": __version__, "created_at": datetime.now(timezone.utc).isoformat(), "overall_result": result.overall_result}, "configuration": asdict(result.config), "alignment": result.alignment, "statistics": result.statistics(), "geometry_diagnostics": result.geometry_diagnostics, "warnings": result.warnings, "regions": [r.as_dict() for r in result.regions], "outputs": {}}
+    payload = {"metadata": {"tool_version": __version__, "created_at": datetime.now(timezone.utc).isoformat(), "overall_result": result.overall_result}, "comparison": {"incomplete": result.incomplete}, "configuration": asdict(result.config), "alignment": result.alignment, "statistics": result.statistics(), "directional_statistics": {"missing_count": result.statistics()["missing_from_working"], "added_count": result.statistics()["added_in_working"], "translation_count": result.statistics().get("translation_regions", 0), "geometry_change_count": result.statistics().get("geometry_change_regions", 0), "topology_change_count": result.statistics().get("topology_regions", 0), "ignored_count": result.statistics()["ignored_regions"]}, "performance": result.timings, "geometry_diagnostics": result.geometry_diagnostics, "warnings": result.warnings, "regions": [r.as_dict() for r in result.regions], "outputs": {}}
     (data / "comparison.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     (data / "raw_differences.json").write_text(json.dumps(_geojson(result.raw_xor), indent=2), encoding="utf-8")
     with (data / "difference_regions.csv").open("w", newline="", encoding="utf-8") as stream:
@@ -52,9 +52,16 @@ def _snapshots(result, directory: Path):
         import matplotlib.pyplot as plt
     except ImportError: return {}
     snapshots = {}
-    for n, region in enumerate((r for r in result.regions if r.classification == "FLAG"), 1):
+    for n, region in enumerate((r for r in result.regions if r.classification not in {"IGNORE", "UNRESOLVED"}), 1):
         fig, ax = plt.subplots(figsize=(7, 7), dpi=result.config.snapshot_dpi)
-        for geom, color, label in ((result.original_geometry, "#167ac6", "Original"), (result.working_geometry, "#d06c18", "Working"), (region.geometry, "#d7191c", "Difference")):
+        directional = (
+            (region.geometry, "#d7191c", "Missing from Working")
+            if region.classification == "MISSING_FROM_WORKING" else
+            (region.geometry, "#1b9e77", "Added in Working")
+            if region.classification == "ADDED_IN_WORKING" else
+            (region.geometry, "#d7191c", "Difference")
+        )
+        for geom, color, label in ((result.original_geometry, "#167ac6", "Original"), (result.working_geometry, "#d06c18", "Working"), directional):
             for polygon in ([geom] if geom.geom_type == "Polygon" else geom.geoms):
                 if polygon.is_empty: continue
                 x,y = polygon.exterior.xy; ax.fill(x,y, color=color, alpha=.25, label=label)
@@ -64,4 +71,4 @@ def _snapshots(result, directory: Path):
 
 def _html(result, path: Path):
     rows = "".join(f"<tr><td>{r.region_id}</td><td>{r.classification}</td><td>{r.classification_reason}</td><td>{r.area_mm2:.3f}</td><td>{r.geometric_deviation_mm:.3f}</td><td>{r.translation_mm:.3f}</td><td>{'yes' if r.topology_changed else 'no'}</td><td>{f'<a href=\"{r.snapshot}\">snapshot</a>' if r.snapshot else ''}</td></tr>" for r in result.regions)
-    stats = result.statistics(); path.write_text(f"""<!doctype html><html><head><meta charset='utf-8'><title>Gerber Comparison Report</title><style>body{{font-family:Arial;margin:2rem}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #777;padding:.45rem}}th{{background:#eee}}.FAIL{{color:#b00}}</style></head><body><h1>Universal Gerber Comparator</h1><h2 class='{result.overall_result}'>{result.overall_result}</h2><p>Original: {result.original.filename}<br>Working: {result.working.filename}</p><p>Geometry tolerance: {result.config.geometric_tolerance_mm:.3f} mm; Translation tolerance: {result.config.translation_tolerance_mm:.3f} mm.</p><p>Flagged: {stats['flagged_regions']} / Total regions: {stats['total_difference_regions']}; Raw XOR area: {stats['total_xor_area_mm2']:.3f} mm².</p><table><tr><th>Region</th><th>Class</th><th>Reason</th><th>Area mm²</th><th>Deviation mm</th><th>Translation mm</th><th>Topology</th><th>Snapshot</th></tr>{rows}</table></body></html>""", encoding="utf-8")
+    stats = result.statistics(); path.write_text(f"""<!doctype html><html><head><meta charset='utf-8'><title>Gerber Comparison Report</title><style>body{{font-family:Arial;margin:2rem}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #777;padding:.45rem}}th{{background:#eee}}.FAIL{{color:#b00}}</style></head><body><h1>Universal Gerber Comparator</h1><h2 class='{result.overall_result}'>{result.overall_result}</h2><p>Original: {result.original.filename}<br>Working: {result.working.filename}</p><p>Geometry tolerance: {result.config.geometric_tolerance_mm:.3f} mm; Translation tolerance: {result.config.translation_tolerance_mm:.3f} mm.</p><p>Flagged: {stats['flagged_regions']} / Total regions: {stats['total_difference_regions']}; Missing from Working: {stats['missing_from_working']}; Added in Working: {stats['added_in_working']}; Raw XOR area: {stats['total_xor_area_mm2']:.3f} mm².</p><table><tr><th>Region</th><th>Class</th><th>Reason</th><th>Area mm²</th><th>Deviation mm</th><th>Translation mm</th><th>Topology</th><th>Snapshot</th></tr>{rows}</table></body></html>""", encoding="utf-8")
