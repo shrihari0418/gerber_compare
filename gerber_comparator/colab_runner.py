@@ -20,7 +20,10 @@ def run_colab() -> None:
     working = names[int(input("Working file number [1]: ") or 1)]
     geometry_tolerance = float(input("Geometric tolerance in mm [0.05]: ") or .05)
     translation_tolerance = float(input("Translation tolerance in mm [0.10]: ") or .10)
-    result = compare_gerbers(original, working, ComparisonConfig(geometry_tolerance, translation_tolerance, auto_alignment=(input("Automatic alignment [Y/n]: ") or "Y").lower() != "n"))
+    def progress(done, total): print(f"[6/8] Screening tiles: {round(done * 100 / total)}%")
+    print("[5/8] Building spatial indexes...")
+    result = compare_gerbers(original, working, ComparisonConfig(geometry_tolerance, translation_tolerance, auto_alignment=(input("Automatic alignment [Y/n]: ") or "Y").lower() != "n"), progress_callback=progress)
+    print(f"[7/8] Verified {result.timings.get('verified_candidate_count', 0)} candidates")
     archive = export_package(result, "Gerber_Comparison")
     print(f"\nRESULT: {result.overall_result}\nFlagged regions: {result.statistics()['flagged_regions']}")
     for region in result.regions[:3]:

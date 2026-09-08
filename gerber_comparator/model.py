@@ -37,6 +37,20 @@ class ComparisonConfig:
     snapshot_dpi: int = 200
     snapshot_margin_mm: float = 1.0
     generate_html_report: bool = True
+    tile_tolerance_factor: float = 50.0
+    minimum_tile_size: float = 1.0
+    maximum_tile_size: float = 10.0
+    tile_margin_factor: float = 2.0
+    minimum_difference_area: float = 0.0
+    enable_spatial_index: bool = True
+    enable_coarse_screening: bool = True
+    enable_displacement_pairing: bool = True
+    enable_hausdorff_verification: bool = True
+    enable_local_topology: bool = True
+    translation_area_similarity: float = 0.80
+    max_candidate_regions: int = 10000
+    max_verification_regions: int = 5000
+    reference_mode: bool = False
 
 @dataclass
 class DifferenceRegion:
@@ -52,6 +66,11 @@ class DifferenceRegion:
     classification: str
     classification_reason: str
     snapshot: str | None = None
+    direction: str | None = None
+    dx_mm: float = 0.0
+    dy_mm: float = 0.0
+    displacement_mm: float = 0.0
+    confidence: float = 1.0
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self); data.pop("geometry", None)
         data["bbox"] = dict(zip(("min_x", "min_y", "max_x", "max_y"), self.bbox))
